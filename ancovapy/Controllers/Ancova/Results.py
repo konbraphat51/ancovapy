@@ -83,11 +83,18 @@ class AncovaResults:
             rejected: bool
             passed: bool
 
-        
+        @dataclass
+        class IndependenceOfErrors:
+            """Dataclass to report independence of errors test results."""
+
+            durbin_watson_statistic: float
 
         homogeneity_of_regression_slopes: HomogeneityOfRegressionSlopes
         independence_of_treatment: IndependenceOfTreatment
         normality_of_residuals: NormalityOfResiduals
+        independence_of_errors: IndependenceOfErrors
+        passed: bool
+        """True if all assumptions are passed."""
 
     description: ModelDescription
     assumption: AssumptionResults
