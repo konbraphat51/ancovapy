@@ -56,9 +56,9 @@ class AncovaResults:
                 """significance of interaction term in full model"""
 
                 target_terms: list[str]
-                f_statistic: float
+                f_statistic: np.float64
                 df: int
-                p_value: float
+                p_value: np.float64
                 rejected: bool
 
             interaction_terms: list[InteractionTerm]
@@ -70,9 +70,9 @@ class AncovaResults:
         class IndependenceOfTreatment:
             """Dataclass to report independence of treatment test results."""
 
-            f_statistic: float
+            f_statistic: np.float64
             df: int
-            p_value: float
+            p_value: np.float64
             rejected: bool
             passed: bool
 
@@ -80,8 +80,8 @@ class AncovaResults:
         class NormalityOfResiduals:
             """Dataclass to report normality of residuals test results."""
 
-            w_statistic: float
-            p_value: float
+            w_statistic: np.float64
+            p_value: np.float64
             rejected: bool
             passed: bool
 
@@ -89,7 +89,7 @@ class AncovaResults:
         class IndependenceOfErrors:
             """Dataclass to report independence of errors test results."""
 
-            durbin_watson_statistic: float
+            durbin_watson_statistic: np.float64
 
         homogeneity_of_regression_slopes: HomogeneityOfRegressionSlopes
         independence_of_treatment: IndependenceOfTreatment
@@ -107,11 +107,28 @@ class AncovaResults:
             """Dataclass to report each term's ANCOVA result."""
 
             name: str
-            f_statistic: float
+            f_statistic: np.float64
             df_between: int
             df_within: int
-            p_value: float
+            p_value: np.float64
             rejected: bool
+            mse: np.float64
+
+        @dataclass
+        class MeanAdjusted:
+            """Dataclass to report adjusted mean."""
+
+            category: str
+            adjusted_mean: np.float64
+            std: np.float64
+
+        # term name -> TermResult
+        term_results: dict[str, TermResult]
+        
+        # category name -> adjusted mean
+        adjusted_means: dict[str, MeanAdjusted]
+
 
     description: ModelDescription
     assumption: AssumptionResults
+    omnibus: OmnibusResults
