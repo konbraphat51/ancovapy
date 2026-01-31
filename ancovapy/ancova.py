@@ -8,7 +8,7 @@ import pandas as pd
 from scipy import stats
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
-from statsmodels.stats.multicomp import pairwise_tukey
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
 from ancovapy.types import Covariate, CovariateType, DependentVariable, SSType
 
@@ -346,7 +346,7 @@ class ANCOVA:
         for cov_name in g_covariates:
             # Perform Tukey HSD test
             try:
-                tukey = pairwise_tukey(df["y"], df[cov_name], alpha=alpha)
+                tukey = pairwise_tukeyhsd(df["y"], df[cov_name], alpha=alpha)
                 
                 # Extract results
                 for i in range(len(tukey.summary().data) - 1):  # Skip header

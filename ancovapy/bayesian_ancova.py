@@ -1,7 +1,7 @@
 """Bayesian ANCOVA implementation using PyMC."""
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
@@ -55,7 +55,7 @@ class BayesianANCOVAResult:
     divergences: int
     
     # Posterior samples (for further analysis)
-    trace: az.InferenceData
+    trace: Any  # az.InferenceData
     
     # For post-pre design
     adjusted_means: Optional[Dict[str, Tuple[float, float, float]]]  # (mean, hdi_low, hdi_high)
@@ -271,7 +271,7 @@ class BayesianANCOVA:
         self,
         df: pd.DataFrame,
         covariates: Dict[str, Covariate],
-    ) -> Tuple[pm.Model, az.InferenceData]:
+    ) -> Tuple[Any, Any]:  # Tuple[pm.Model, az.InferenceData]
         """Build and sample from Bayesian model."""
         with pm.Model() as model:
             # Priors for intercept
@@ -314,7 +314,7 @@ class BayesianANCOVA:
 
     def _extract_covariate_stats(
         self,
-        trace: az.InferenceData,
+        trace: Any,  # az.InferenceData
         covariates: Dict[str, Covariate],
         hdi_prob: float,
     ) -> List[BayesianCovariateStats]:
@@ -375,7 +375,7 @@ class BayesianANCOVA:
 
     def _perform_group_comparisons(
         self,
-        trace: az.InferenceData,
+        trace: Any,  # az.InferenceData
         df: pd.DataFrame,
         covariates: Dict[str, Covariate],
         hdi_prob: float,
@@ -452,7 +452,7 @@ class BayesianANCOVA:
         return comparisons if comparisons else None
 
     def _calculate_diagnostics(
-        self, trace: az.InferenceData
+        self, trace: Any  # az.InferenceData
     ) -> Tuple[float, float, float, int]:
         """Calculate MCMC diagnostics."""
         # R-hat (should be < 1.01)
@@ -479,7 +479,7 @@ class BayesianANCOVA:
 
     def _calculate_adjusted_means(
         self,
-        trace: az.InferenceData,
+        trace: Any,  # az.InferenceData
         df: pd.DataFrame,
         groups: npt.NDArray[np.str_],
         baseline: npt.NDArray[np.float64],
@@ -541,7 +541,7 @@ class BayesianANCOVA:
     def _calculate_mean_differences(
         self,
         adjusted_means: Dict[str, Tuple[float, float, float]],
-        trace: az.InferenceData,
+        trace: Any,  # az.InferenceData
         hdi_prob: float,
     ) -> Tuple[Dict[Tuple[str, str], float], Dict[Tuple[str, str], Tuple[float, float]]]:
         """Calculate pairwise differences between adjusted means."""

@@ -53,16 +53,30 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
-disallow_any_generics = true
-disallow_subclassing_any = true
-disallow_untyped_calls = true
-disallow_incomplete_defs = true
 check_untyped_defs = true
-disallow_untyped_decorators = true
 no_implicit_optional = true
 warn_redundant_casts = true
-warn_unused_ignores = true
+warn_unused_ignores = false
 warn_no_return = true
+# Relax strict settings for untyped third-party libraries
+disallow_any_generics = false
+disallow_subclassing_any = false
+disallow_untyped_calls = false
+disallow_incomplete_defs = true
+disallow_untyped_decorators = false
+
+# Ignore missing imports for third-party libraries
+[[tool.mypy.overrides]]
+module = [
+    "pandas.*",
+    "scipy.*",
+    "statsmodels.*",
+    "pymc.*",
+    "arviz.*",
+    "patsy.*",
+    "numpy.*",
+]
+ignore_missing_imports = true
 
 [tool.black]
 line-length = 88
