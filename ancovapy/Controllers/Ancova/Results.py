@@ -1,8 +1,42 @@
 from dataclasses import dataclass
+from typing import Literal
+import numpy as np
 
 @dataclass
 class AncovaResults:
     """Dataclass to report ANCOVA results."""
+
+    @dataclass
+    class ModelDescription:
+        """Dataclass to describe the ANCOVA model used."""
+
+        @dataclass
+        class Term:
+            """Dataclass to describe each term in the model."""
+            name: str
+            
+        @dataclass
+        class TermQuantitative(Term):
+            mean: np.float64
+            std: np.float64
+            min: np.float64
+            max: np.float64
+
+        @dataclass
+        class TermCategorical(Term):
+            categories: dict[str, int]
+            category_n: int
+            control_category: str
+            comparing: bool
+
+        @dataclass
+        class TermInteraction(Term):
+            interacting_terms: list[str]
+
+        model_type: Literal["standard ANCOVA"]
+        ss_type: Literal[1, 2, 3]
+        dependent_variable: TermQuantitative
+        independent_variables: list[Term]
 
     @dataclass
     class AssumptionResults:
@@ -32,4 +66,5 @@ class AncovaResults:
 
         homogeneity_of_regression_slopes: HomogeneityOfRegressionSlopes
 
+    description: ModelDescription
     assumption: AssumptionResults
