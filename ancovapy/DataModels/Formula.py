@@ -1,4 +1,9 @@
-from ancovapy.DataModels.Variables import Variable, QuantitativeVariable, CategoricalVariable
+from ancovapy.DataModels.Variables import (
+    Variable,
+    QuantitativeVariable,
+    CategoricalVariable,
+)
+
 
 class LinearFormula:
     """Domain class for linear formulas used for GLM modeling."""
@@ -18,7 +23,7 @@ class LinearFormula:
             for var in self.independent_variables
             if isinstance(var, CategoricalVariable)
         ]
-    
+
     @property
     def independent_quantitative_variables(self) -> list[QuantitativeVariable]:
         return [

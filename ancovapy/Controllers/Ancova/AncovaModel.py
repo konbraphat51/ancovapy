@@ -1,8 +1,8 @@
 from ancovapy.Controllers.Ancova.Results import AncovaResults
 
+
 class AncovaModel:
-    """TODO: write docstring for Ancova
-    """
+    """TODO: write docstring for Ancova"""
 
     def __init__(self) -> None:
         pass

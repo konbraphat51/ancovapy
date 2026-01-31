@@ -5,14 +5,16 @@ from typing import Any, Literal
 import numpy as np
 from numpy.typing import NDArray
 
+
 @dataclass
 class Variable(ABC):
     name: str
     type: Literal["quantitative", "categorical"]
-    
+
     @abstractmethod
     def __len__(self) -> int:
         raise NotImplementedError()
+
 
 class QuantitativeVariable(Variable):
     """Domain class for quantitative variables.
@@ -47,12 +49,13 @@ class QuantitativeVariable(Variable):
     def __len__(self) -> int:
         return len(self.data)
 
+
 class CategoricalVariable(Variable):
     """Domain class for categorical variables.
-    
+
     This holds categorical data as one-hot encoded numpy matrix
     """
-    
+
     data: NDArray[np.int8]
 
     def __init__(
@@ -64,7 +67,7 @@ class CategoricalVariable(Variable):
         self.name = name
         self.data = self._transform_type(data, control)
         self.type = "categorical"
-    
+
     def _transform_type(
         self,
         data: Sequence[Any],
@@ -77,7 +80,7 @@ class CategoricalVariable(Variable):
 
     def __len__(self) -> int:
         return len(self.data)
-    
+
     @property
     def categories(self) -> int:
         """Returns the number of categories in this categorical variable."""

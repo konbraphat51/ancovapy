@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Literal
 import numpy as np
 
+
 @dataclass
 class AncovaResults:
     """Dataclass to report ANCOVA results."""
@@ -13,8 +14,9 @@ class AncovaResults:
         @dataclass
         class Term:
             """Dataclass to describe each term in the model."""
+
             name: str
-            
+
         @dataclass
         class TermQuantitative(Term):
             mean: np.float64
@@ -51,7 +53,7 @@ class AncovaResults:
         @dataclass
         class HomogeneityOfRegressionSlopes:
             """Dataclass to report homogeneity of regression slopes test results.
-            
+
             if `passed==False`, use Heterogeneous Regression ANCOVA model.
             """
 
@@ -128,7 +130,7 @@ class AncovaResults:
 
         # term name -> TermResult
         term_results: dict[str, TermResult]
-        
+
         # category name -> adjusted mean
         adjusted_means: dict[str, MeanAdjusted]
 
