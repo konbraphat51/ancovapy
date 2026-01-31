@@ -9,6 +9,7 @@ This example demonstrates:
 """
 
 import numpy as np
+
 from ancovapy import ANCOVA, BayesianANCOVA
 
 # Set random seed for reproducibility
@@ -27,9 +28,13 @@ pre_scores = np.random.normal(100, 15, n_total)
 # Generate post-scores with treatment effect
 post_scores = np.zeros(n_total)
 # Control: small improvement
-post_scores[groups == "Control"] = pre_scores[groups == "Control"] + np.random.normal(3, 10, n_per_group)
+post_scores[groups == "Control"] = pre_scores[groups == "Control"] + np.random.normal(
+    3, 10, n_per_group
+)
 # Treatment: larger improvement
-post_scores[groups == "Treatment"] = pre_scores[groups == "Treatment"] + np.random.normal(12, 10, n_per_group)
+post_scores[groups == "Treatment"] = pre_scores[
+    groups == "Treatment"
+] + np.random.normal(12, 10, n_per_group)
 
 # Calculate raw change scores
 change_scores = post_scores - pre_scores
@@ -43,9 +48,17 @@ print("\nDescriptive Statistics:")
 for group in ["Control", "Treatment"]:
     mask = groups == group
     print(f"\n  {group}:")
-    print(f"    Pre:  Mean={pre_scores[mask].mean():.2f}, SD={pre_scores[mask].std():.2f}")
-    print(f"    Post: Mean={post_scores[mask].mean():.2f}, SD={post_scores[mask].std():.2f}")
-    print(f"    Raw Change: Mean={change_scores[mask].mean():.2f}, SD={change_scores[mask].std():.2f}")
+    print(
+        f"    Pre:  Mean={pre_scores[mask].mean():.2f}, SD={pre_scores[mask].std():.2f}"
+    )
+    print(
+        f"    Post: Mean={post_scores[mask].mean():.2f}, "
+        f"SD={post_scores[mask].std():.2f}"
+    )
+    print(
+        f"    Raw Change: Mean={change_scores[mask].mean():.2f}, "
+        f"SD={change_scores[mask].std():.2f}"
+    )
 
 # Classical ANCOVA approach
 print("\n" + "=" * 60)
@@ -55,7 +68,7 @@ print("=" * 60)
 ancova = ANCOVA(ss_type=2)
 result_classical = ancova.fit_postpre(pre_scores, post_scores, groups)
 
-print(f"\nOverall Model:")
+print("\nOverall Model:")
 print(f"  F-statistic: {result_classical.f_statistic:.4f}")
 print(f"  p-value: {result_classical.p_value:.4e}")
 print(f"  R²: {result_classical.r_squared:.4f}")

@@ -9,6 +9,7 @@ This example demonstrates:
 """
 
 import numpy as np
+
 from ancovapy import BayesianANCOVA
 
 # Set random seed for reproducibility
@@ -38,7 +39,7 @@ outcome += np.random.normal(0, 5, len(outcome))
 
 # Define covariates
 covariates = {
-    "age": (age, "Q"),          # Quantitative covariate
+    "age": (age, "Q"),  # Quantitative covariate
     "treatment": (groups, "G"),  # Group covariate
 }
 

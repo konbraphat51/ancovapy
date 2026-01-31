@@ -1,6 +1,7 @@
 """Type definitions for ancovapy."""
 
-from typing import Literal, Tuple, Union
+from typing import Literal
+
 import numpy as np
 import numpy.typing as npt
 
@@ -19,7 +20,7 @@ HypothesisType = Literal["two-sided", "one-sided"]
 SSType = Literal[1, 2, 3]
 
 # Covariate specification: (data array, type)
-Covariate = Tuple[npt.NDArray[np.float64], CovariateType]
+Covariate = tuple[npt.NDArray[np.float64], CovariateType]
 
 # For representing dependent variable data
 DependentVariable = npt.NDArray[np.float64]
