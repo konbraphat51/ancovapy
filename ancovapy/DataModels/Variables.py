@@ -59,16 +59,20 @@ class CategoricalVariable(Variable):
         self,
         name: str,
         data: Sequence[Any],
+        control: Any | None = None,
     ):
         self.name = name
-        self.data = self._transform_type(data)
+        self.data = self._transform_type(data, control)
         self.type = "categorical"
     
     def _transform_type(
         self,
         data: Sequence[Any],
+        control: Any | None = None,
     ) -> NDArray[np.int8]:
         # TODO: implement one-hot encoding to np.int8 matrix
+        # When category number is k, the resulting matrix should have shape (n_samples, k-1)
+        # The missing category is treated as the control group specified as `control`. If None, the last category is used as control
         raise NotImplementedError()
 
     def __len__(self) -> int:
