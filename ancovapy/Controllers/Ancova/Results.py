@@ -74,8 +74,20 @@ class AncovaResults:
             rejected: bool
             passed: bool
 
+        @dataclass
+        class NormalityOfResiduals:
+            """Dataclass to report normality of residuals test results."""
+
+            w_statistic: float
+            p_value: float
+            rejected: bool
+            passed: bool
+
+        
+
         homogeneity_of_regression_slopes: HomogeneityOfRegressionSlopes
         independence_of_treatment: IndependenceOfTreatment
+        normality_of_residuals: NormalityOfResiduals
 
     description: ModelDescription
     assumption: AssumptionResults
