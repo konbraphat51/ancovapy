@@ -36,7 +36,10 @@ class AncovaResults:
         model_type: Literal["standard ANCOVA"]
         ss_type: Literal[1, 2, 3]
         dependent_variable: TermQuantitative
-        independent_variables: list[Term]
+
+        # term name -> Term
+        independent_variables: dict[str, Term]
+        
         alpha: np.float64
         """Significance level used for hypothesis testing."""
 
