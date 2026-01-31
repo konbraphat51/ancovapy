@@ -37,6 +37,8 @@ class AncovaResults:
         ss_type: Literal[1, 2, 3]
         dependent_variable: TermQuantitative
         independent_variables: list[Term]
+        alpha: np.float64
+        """Significance level used for hypothesis testing."""
 
     @dataclass
     class AssumptionResults:
@@ -95,6 +97,21 @@ class AncovaResults:
         independence_of_errors: IndependenceOfErrors
         passed: bool
         """True if all assumptions are passed."""
+
+    @dataclass
+    class OmnibusResults:
+        """Dataclass to report omnibus ANCOVA results."""
+
+        @dataclass
+        class TermResult:
+            """Dataclass to report each term's ANCOVA result."""
+
+            name: str
+            f_statistic: float
+            df_between: int
+            df_within: int
+            p_value: float
+            rejected: bool
 
     description: ModelDescription
     assumption: AssumptionResults
