@@ -137,7 +137,7 @@ class BayesianANCOVA:
             divergences=divergences,
             trace=trace,
             adjusted_means=None,
-            adjusted_mean_diffs=None,
+            adj_mean_diffs=None,
             credible_intervals_95=None,
         )
 

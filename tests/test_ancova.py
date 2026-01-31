@@ -94,7 +94,7 @@ class TestANCOVA:
         assert "Treatment" in result.adjusted_means
 
         # Check pairwise differences
-        assert result.adjusted_mean_diffs is not None
+        assert result.adj_mean_diffs is not None
         assert result.credible_intervals is not None
 
     def test_invalid_input_lengths(self) -> None:
