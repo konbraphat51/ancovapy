@@ -8,7 +8,7 @@ A Python library for scientifically rigorous ANCOVA (Analysis of Covariance) and
 ## Features
 
 - **Classical ANCOVA**: Frequentist analysis using statsmodels with configurable Sum of Squares types
-- **Bayesian ANCOVA**: MCMC-based inference using PyMC with credible intervals and diagnostics
+- **Bayesian ANCOVA**: MCMC-based inference using Bambi (high-level interface to PyMC) with credible intervals and diagnostics
 - **Flexible Covariates**: Support for quantitative (Q), categorical (C), and group (G) types
 - **Post-hoc Tests**: Automatic Tukey HSD for group comparisons
 - **Post-Pre Designs**: Specialized analysis for pre-post experimental designs
@@ -86,7 +86,7 @@ Both classical and Bayesian approaches support:
 - scipy >= 1.7.0
 - pandas >= 1.3.0
 - statsmodels >= 0.13.0
-- pymc >= 5.0.0
+- bambi >= 0.13.0 (includes PyMC as dependency)
 - arviz >= 0.15.0
 
 ## Development

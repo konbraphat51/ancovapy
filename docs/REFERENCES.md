@@ -48,6 +48,10 @@
     - Bayesian approach to group comparisons
     - https://doi.org/10.1037/a0029146
 
+11. **Capretto, T., Piho, C., Kumar, R., Westfall, J., Yarkoni, T., & Martin, O. A. (2022).** Bambi: A simple interface for fitting Bayesian linear models in Python. *Journal of Statistical Software*, 103(15), 1-29.
+    - High-level Bayesian modeling interface used in this library
+    - https://doi.org/10.18637/jss.v103.i15
+
 ## Additional Reading
 
 ### ANCOVA Assumptions and Diagnostics

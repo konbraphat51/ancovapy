@@ -31,7 +31,7 @@ dependencies = [
     "scipy>=1.7.0",
     "pandas>=1.3.0",
     "statsmodels>=0.13.0",
-    "pymc>=5.0.0",
+    "bambi>=0.13.0",
     "arviz>=0.15.0",
 ]
 
