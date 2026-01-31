@@ -8,8 +8,9 @@ This library provides scientifically rigorous implementations of:
 - Strict type checking and validation
 """
 
-from ancovapy.ancova import ANCOVA, ANCOVAResult
-from ancovapy.bayesian_ancova import BayesianANCOVA, BayesianANCOVAResult
+from ancovapy.ancova import ANCOVA
+from ancovapy.bayesian_ancova import BayesianANCOVA
+from ancovapy.results import ANCOVAResult, BayesianANCOVAResult
 from ancovapy.types import CovariateType, HypothesisType
 
 __version__ = "0.1.0"

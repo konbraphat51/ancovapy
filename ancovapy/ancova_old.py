@@ -1,5 +1,8 @@
 """Classical ANCOVA implementation using statsmodels."""
 
+from dataclasses import dataclass
+from typing import Optional
+
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
@@ -8,10 +11,59 @@ from scipy import stats
 from statsmodels.formula.api import ols
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
-from ancovapy.constants import VALID_COVARIATE_TYPES
-from ancovapy.helpers import convert_to_categorical, validate_covariate_type
-from ancovapy.results import ANCOVAResult, CovariateStats, PostHocResult
-from ancovapy.types import Covariate, DependentVariable, SSType
+from ancovapy.types import Covariate, CovariateType, DependentVariable, SSType
+
+
+@dataclass
+class PostHocResult:
+    """Results from post-hoc pairwise comparisons."""
+
+    group1: str
+    group2: str
+    mean_diff: float
+    p_value: float
+    ci_lower: float
+    ci_upper: float
+    reject: bool
+
+
+@dataclass
+class CovariateStats:
+    """Statistics for a single covariate."""
+
+    name: str
+    covariate_type: CovariateType
+    coefficient: float
+    std_error: float
+    t_value: float
+    p_value: float
+    ci_lower: float
+    ci_upper: float
+
+
+@dataclass
+class ANCOVAResult:
+    """Results from ANCOVA analysis."""
+
+    # Overall model statistics
+    f_statistic: float
+    p_value: float
+    r_squared: float
+    adj_r_squared: float
+
+    # Covariate statistics
+    covariate_stats: list[CovariateStats]
+
+    # Post-hoc test results (only for G-type covariates)
+    posthoc_results: Optional[list[PostHocResult]]
+
+    # Full model summary
+    model_summary: str
+
+    # For post-pre design
+    adjusted_means: Optional[dict[str, float]]
+    adjusted_mean_diffs: Optional[dict[tuple[str, str], float]]
+    credible_intervals: Optional[dict[tuple[str, str], tuple[float, float]]]
 
 
 class ANCOVA:
@@ -24,11 +76,6 @@ class ANCOVA:
     - Configurable SS (Sum of Squares) types
     - Post-hoc tests for group comparisons
     - Post-pre experimental design analysis
-
-    Covariate Types:
-        - "Q" (Quantitative): Continuous numerical variables (e.g., age, baseline score)
-        - "C" (Categorical): Categorical factors without pairwise comparisons (e.g., site, gender)
-        - "G" (Group): Categorical factors with automatic Tukey HSD post-hoc tests (e.g., treatment groups)
 
     References:
         - Maxwell, S. E., & Delaney, H. D. (2004). Designing experiments and
@@ -44,8 +91,8 @@ class ANCOVA:
 
         Args:
             ss_type: Sum of Squares type (1, 2, or 3). Default is 2.
-                    Type I: Sequential (order-dependent)
-                    Type II: Hierarchical (recommended for balanced designs)
+                    Type I: Sequential
+                    Type II: Hierarchical (default, recommended for balanced designs)
                     Type III: Marginal (recommended for unbalanced designs)
         """
         self.ss_type = ss_type
@@ -60,11 +107,8 @@ class ANCOVA:
         Fit ANCOVA model to data.
 
         Args:
-            dependent_var: Dependent variable array (outcome measurements)
-            covariates: Dictionary mapping covariate names to (data, type) tuples.
-                       Each tuple contains:
-                       - data: Array of covariate values (can be numbers or strings)
-                       - type: One of "Q" (quantitative), "C" (categorical), or "G" (group)
+            dependent_var: Dependent variable array
+            covariates: Dictionary mapping covariate names to (data, type) tuples
             alpha: Significance level for statistical tests (default: 0.05)
 
         Returns:
@@ -85,14 +129,14 @@ class ANCOVA:
         # Fit model
         model = ols(formula, data=df).fit()
 
-        # Calculate ANOVA table with specified SS type
-        anova_table = sm.stats.anova_lm(model, typ=self.ss_type)
-
         # Extract covariate statistics
         covariate_stats = self._extract_covariate_stats(model, covariates, alpha)
 
         # Perform post-hoc tests for G-type covariates
         posthoc_results = self._perform_posthoc_tests(df, covariates, alpha)
+
+        # Calculate ANOVA table with specified SS type
+        sm.stats.anova_lm(model, typ=self.ss_type)
 
         return ANCOVAResult(
             f_statistic=model.fvalue,
@@ -103,7 +147,7 @@ class ANCOVA:
             posthoc_results=posthoc_results,
             model_summary=str(model.summary()),
             adjusted_means=None,
-            adj_mean_diffs=None,
+            adjusted_mean_diffs=None,
             credible_intervals=None,
         )
 
@@ -111,21 +155,21 @@ class ANCOVA:
         self,
         pre_scores: DependentVariable,
         post_scores: DependentVariable,
-        groups: npt.NDArray[np.str_] | npt.NDArray[np.int_] | npt.NDArray[np.float64],
-        additional_covariates: dict[str, Covariate] | None = None,
+        groups: npt.NDArray[np.str_],
+        additional_covariates: Optional[dict[str, Covariate]] = None,
         alpha: float = 0.05,
     ) -> ANCOVAResult:
         """
         Fit ANCOVA model for post-pre experimental design.
 
-        This analyzes post-intervention scores adjusting for baseline (pre) scores
-        and any additional covariates. It calculates adjusted mean post scores and
+        This analyzes change from pre to post, adjusting for baseline (pre) scores
+        and any additional covariates. It calculates adjusted mean changes and
         their differences between groups.
 
         Args:
-            pre_scores: Pre-intervention (baseline) scores
-            post_scores: Post-intervention scores (this is the dependent variable)
-            groups: Group labels for each observation (can be strings or numbers)
+            pre_scores: Pre-intervention scores
+            post_scores: Post-intervention scores
+            groups: Group labels for each observation
             additional_covariates: Optional additional covariates
             alpha: Significance level (default: 0.05)
 
@@ -140,51 +184,39 @@ class ANCOVA:
         if len(pre_scores) != len(post_scores) or len(pre_scores) != len(groups):
             raise ValueError("All input arrays must have the same length")
 
-        # Prepare covariates dictionary with baseline and group
-        covariates = self._prepare_postpre_covariates(
-            pre_scores, groups, additional_covariates
-        )
+        # Calculate change scores
+        change_scores = post_scores - pre_scores
 
-        # Fit ANCOVA with post scores as dependent variable
-        result = self.fit(post_scores, covariates, alpha)
-
-        # Calculate adjusted means using model predictions
-        df = self._prepare_dataframe(post_scores, covariates)
-        formula = self._build_formula(covariates)
-        model = ols(formula, data=df).fit()
-
-        adjusted_means = self._calculate_adjusted_means_prediction(
-            model, df, groups, pre_scores
-        )
-
-        # Calculate pairwise differences
-        adj_mean_diffs, credible_intervals = self._calculate_mean_differences(
-            adjusted_means, alpha
-        )
-
-        # Update result with post-pre specific information
-        result.adjusted_means = adjusted_means
-        result.adj_mean_diffs = adj_mean_diffs
-        result.credible_intervals = credible_intervals
-
-        return result
-
-    def _prepare_postpre_covariates(
-        self,
-        pre_scores: DependentVariable,
-        groups: npt.NDArray,
-        additional_covariates: dict[str, Covariate] | None,
-    ) -> dict[str, Covariate]:
-        """Prepare covariates dictionary for post-pre design."""
+        # Prepare covariates dictionary
         covariates: dict[str, Covariate] = {
             "baseline": (pre_scores, "Q"),
-            "group": (groups, "G"),
+            "group": (groups.astype(str), "G"),
         }
 
         if additional_covariates:
             covariates.update(additional_covariates)
 
-        return covariates
+        # Fit regular ANCOVA
+        result = self.fit(change_scores, covariates, alpha)
+
+        # Calculate adjusted means for each group
+        df = self._prepare_dataframe(change_scores, covariates)
+        formula = self._build_formula(covariates)
+        model = ols(formula, data=df).fit()
+
+        adjusted_means = self._calculate_adjusted_means(model, df, groups, pre_scores)
+
+        # Calculate pairwise differences
+        adjusted_mean_diffs, credible_intervals = self._calculate_mean_differences(
+            adjusted_means, alpha
+        )
+
+        # Update result with post-pre specific information
+        result.adjusted_means = adjusted_means
+        result.adjusted_mean_diffs = adjusted_mean_diffs
+        result.credible_intervals = credible_intervals
+
+        return result
 
     def _validate_inputs(
         self,
@@ -202,7 +234,11 @@ class ANCOVA:
                     f"Covariate '{name}' length ({len(data)}) does not match "
                     f"dependent variable length ({n})"
                 )
-            validate_covariate_type(cov_type, name)
+            if cov_type not in ("Q", "C", "G"):
+                raise ValueError(
+                    f"Invalid covariate type '{cov_type}' for '{name}'. "
+                    "Must be 'Q', 'C', or 'G'"
+                )
 
     def _prepare_dataframe(
         self,
@@ -214,8 +250,8 @@ class ANCOVA:
 
         for name, (cov_data, cov_type) in covariates.items():
             if cov_type in ("C", "G"):
-                # Categorical variables - handles both strings and numbers
-                data[name] = convert_to_categorical(cov_data)
+                # Categorical variables
+                data[name] = pd.Categorical(cov_data.astype(str))
             else:
                 # Quantitative variables
                 data[name] = cov_data.astype(float)
@@ -246,12 +282,14 @@ class ANCOVA:
         """Extract statistics for each covariate."""
         stats_list = []
 
-        params = model.params
-        conf_int = model.conf_int(alpha=alpha)
-
         for name, (_, cov_type) in covariates.items():
+            # Find relevant parameters in model
+            params = model.params
+            conf_int = model.conf_int(alpha=alpha)
+
+            # For categorical variables, we might have multiple dummy variables
+            # For quantitative, we have one parameter
             if cov_type == "Q":
-                # Quantitative covariate - single parameter
                 if name in params.index:
                     stats_list.append(
                         CovariateStats(
@@ -266,9 +304,11 @@ class ANCOVA:
                         )
                     )
             else:
-                # Categorical - find first related parameter
+                # For categorical variables, report overall effect
+                # Find all parameters related to this covariate
                 related_params = [p for p in params.index if name in p]
                 if related_params:
+                    # Use first related parameter as representative
                     param_name = related_params[0]
                     stats_list.append(
                         CovariateStats(
@@ -290,7 +330,7 @@ class ANCOVA:
         df: pd.DataFrame,
         covariates: dict[str, Covariate],
         alpha: float,
-    ) -> list[PostHocResult] | None:
+    ) -> Optional[list[PostHocResult]]:
         """Perform post-hoc tests for G-type covariates."""
         posthoc_results = []
 
@@ -303,10 +343,11 @@ class ANCOVA:
             return None
 
         for cov_name in g_covariates:
+            # Perform Tukey HSD test
             try:
                 tukey = pairwise_tukeyhsd(df["y"], df[cov_name], alpha=alpha)
 
-                # Extract results from Tukey summary
+                # Extract results
                 for i in range(len(tukey.summary().data) - 1):  # Skip header
                     row = tukey.summary().data[i + 1]
                     posthoc_results.append(
@@ -326,31 +367,44 @@ class ANCOVA:
 
         return posthoc_results if posthoc_results else None
 
-    def _calculate_adjusted_means_prediction(
+    def _calculate_adjusted_means(
         self,
         model: sm.regression.linear_model.RegressionResultsWrapper,
         df: pd.DataFrame,
-        groups: npt.NDArray,
+        groups: npt.NDArray[np.str_],
         baseline: npt.NDArray[np.float64],
     ) -> dict[str, float]:
-        """
-        Calculate adjusted means using model predictions for all rows.
-        
-        This computes predicted values for all observations and takes the mean
-        within each group, which is more robust than predicting at mean baseline.
-        """
+        """Calculate adjusted means for each group at mean baseline."""
         adjusted_means = {}
         unique_groups = np.unique(groups)
-        
-        # Get predictions for all observations
-        predictions = model.predict(df)
-        
-        # Calculate mean prediction for each group
+        mean_baseline = float(np.mean(baseline))
+
         for group in unique_groups:
-            group_mask = groups.astype(str) == str(group)
-            group_predictions = predictions[group_mask]
-            adjusted_means[str(group)] = float(np.mean(group_predictions))
-        
+            # Create prediction data at mean baseline
+            pred_data = pd.DataFrame(
+                {
+                    "baseline": [mean_baseline],
+                    "group": pd.Categorical([group]),
+                }
+            )
+
+            # Add other covariates at their means if present
+            for col in df.columns:
+                if col not in ["y", "baseline", "group"]:
+                    if pd.api.types.is_numeric_dtype(df[col]):
+                        pred_data[col] = [df[col].mean()]
+                    else:
+                        # Use most common category
+                        pred_data[col] = [df[col].mode()[0]]
+
+            try:
+                predicted = model.predict(pred_data)
+                adjusted_means[str(group)] = float(predicted[0])
+            except Exception:
+                # If prediction fails, use simple mean
+                group_mask = groups == group
+                adjusted_means[str(group)] = float(df.loc[group_mask, "y"].mean())
+
         return adjusted_means
 
     def _calculate_mean_differences(
@@ -370,7 +424,9 @@ class ANCOVA:
                 diff = adjusted_means[group1] - adjusted_means[group2]
                 differences[(group1, group2)] = diff
 
-                # Approximation for confidence interval
+                # For frequentist ANCOVA, confidence intervals come from post-hoc tests
+                # Here we provide a simple approximation using normal distribution
+                # In practice, this would come from the model's prediction intervals
                 se_approx = abs(diff) * 0.2  # Rough approximation
                 margin = stats.norm.ppf(1 - alpha / 2) * se_approx
                 intervals[(group1, group2)] = (diff - margin, diff + margin)

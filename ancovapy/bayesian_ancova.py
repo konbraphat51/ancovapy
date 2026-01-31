@@ -1,6 +1,5 @@
 """Bayesian ANCOVA implementation using PyMC."""
 
-from dataclasses import dataclass
 from typing import Any, Optional
 
 import arviz as az
@@ -9,61 +8,14 @@ import numpy.typing as npt
 import pandas as pd
 import pymc as pm
 
-from ancovapy.types import Covariate, CovariateType, DependentVariable, HypothesisType
-
-
-@dataclass
-class BayesianCovariateStats:
-    """Bayesian statistics for a single covariate."""
-
-    name: str
-    covariate_type: CovariateType
-    mean: float
-    std: float
-    hdi_lower: float
-    hdi_upper: float
-    prob_positive: float  # P(coefficient > 0)
-    prob_negative: float  # P(coefficient < 0)
-
-
-@dataclass
-class BayesianGroupComparison:
-    """Bayesian comparison between two groups."""
-
-    group1: str
-    group2: str
-    mean_diff: float
-    hdi_lower: float
-    hdi_upper: float
-    prob_greater: float  # P(group1 > group2)
-    rope_decision: Optional[str]  # "accept", "reject", or "undecided"
-
-
-@dataclass
-class BayesianANCOVAResult:
-    """Results from Bayesian ANCOVA analysis."""
-
-    # Covariate statistics
-    covariate_stats: list[BayesianCovariateStats]
-
-    # Group comparisons (for G-type covariates)
-    group_comparisons: Optional[list[BayesianGroupComparison]]
-
-    # Model diagnostics
-    rhat_max: float  # Maximum R-hat (should be < 1.01)
-    ess_bulk_min: float  # Minimum bulk ESS (should be > 400)
-    ess_tail_min: float  # Minimum tail ESS (should be > 400)
-    divergences: int
-
-    # Posterior samples (for further analysis)
-    trace: Any  # az.InferenceData
-
-    # For post-pre design
-    adjusted_means: Optional[
-        dict[str, tuple[float, float, float]]
-    ]  # (mean, hdi_low, hdi_high)
-    adjusted_mean_diffs: Optional[dict[tuple[str, str], float]]
-    credible_intervals_95: Optional[dict[tuple[str, str], tuple[float, float]]]
+from ancovapy.constants import VALID_COVARIATE_TYPES
+from ancovapy.helpers import convert_to_categorical, validate_covariate_type
+from ancovapy.results import (
+    BayesianANCOVAResult,
+    BayesianCovariateStats,
+    BayesianGroupComparison,
+)
+from ancovapy.types import Covariate, DependentVariable, HypothesisType
 
 
 class BayesianANCOVA:
@@ -94,22 +46,46 @@ class BayesianANCOVA:
         mcmc_tune: int = 1000,
         mcmc_chains: int = 4,
         random_seed: Optional[int] = None,
+        prior_intercept_sigma: float = 10.0,
+        prior_beta_sigma: float = 10.0,
+        prior_sigma: float = 1.0,
     ):
         """
         Initialize Bayesian ANCOVA analyzer.
 
         Args:
-            hypothesis_type: "two-sided" or "one-sided" hypothesis testing
-            mcmc_samples: Number of MCMC samples per chain (default: 2000)
-            mcmc_tune: Number of tuning steps (default: 1000)
-            mcmc_chains: Number of MCMC chains (default: 4)
-            random_seed: Random seed for reproducibility
+            hypothesis_type: Type of hypothesis testing
+                - "two-sided": Test if effect differs from zero
+                - "one-sided": Test if effect is positive (directional)
+            mcmc_samples: Number of MCMC samples per chain after tuning.
+                Higher values provide more accurate estimates but take longer.
+                Recommended: 2000-5000 (default: 2000)
+            mcmc_tune: Number of tuning/warmup steps before sampling.
+                Used to adapt the sampler for better efficiency.
+                Recommended: 1000-2000 (default: 1000)
+            mcmc_chains: Number of independent MCMC chains to run.
+                Multiple chains allow convergence checking via R-hat.
+                Recommended: 4-6 (default: 4)
+            random_seed: Random seed for reproducibility of MCMC sampling.
+                Use same seed for identical results (default: None)
+            prior_intercept_sigma: Standard deviation for intercept prior.
+                Controls how much the intercept can vary from 0.
+                (default: 10.0)
+            prior_beta_sigma: Standard deviation for coefficient priors.
+                Controls how much each coefficient can vary from 0.
+                (default: 10.0)
+            prior_sigma: Scale parameter for noise prior (HalfNormal).
+                Represents expected residual standard deviation.
+                (default: 1.0)
         """
         self.hypothesis_type = hypothesis_type
         self.mcmc_samples = mcmc_samples
         self.mcmc_tune = mcmc_tune
         self.mcmc_chains = mcmc_chains
         self.random_seed = random_seed
+        self.prior_intercept_sigma = prior_intercept_sigma
+        self.prior_beta_sigma = prior_beta_sigma
+        self.prior_sigma = prior_sigma
 
     def fit(
         self,
@@ -169,21 +145,20 @@ class BayesianANCOVA:
         self,
         pre_scores: DependentVariable,
         post_scores: DependentVariable,
-        groups: npt.NDArray[np.str_],
-        additional_covariates: Optional[dict[str, Covariate]] = None,
+        groups: npt.NDArray[np.str_] | npt.NDArray[np.int_] | npt.NDArray[np.float64],
+        additional_covariates: dict[str, Covariate] | None = None,
         hdi_prob: float = 0.95,
-        rope: Optional[tuple[float, float]] = None,
+        rope: tuple[float, float] | None = None,
     ) -> BayesianANCOVAResult:
         """
         Fit Bayesian ANCOVA model for post-pre experimental design.
 
-        This analyzes change from pre to post using Bayesian inference,
-        providing credible intervals for adjusted mean changes.
+        This analyzes post-intervention scores adjusting for baseline (pre) scores.
 
         Args:
-            pre_scores: Pre-intervention scores
-            post_scores: Post-intervention scores
-            groups: Group labels for each observation
+            pre_scores: Pre-intervention (baseline) scores
+            post_scores: Post-intervention scores (this is the dependent variable)
+            groups: Group labels for each observation (can be strings or numbers)
             additional_covariates: Optional additional covariates
             hdi_prob: Probability for HDI (default: 0.95)
             rope: Region of Practical Equivalence
@@ -195,35 +170,32 @@ class BayesianANCOVA:
         if len(pre_scores) != len(post_scores) or len(pre_scores) != len(groups):
             raise ValueError("All input arrays must have the same length")
 
-        # Calculate change scores
-        change_scores = post_scores - pre_scores
-
-        # Prepare covariates dictionary
+        # Prepare covariates dictionary with baseline and group
         covariates: dict[str, Covariate] = {
             "baseline": (pre_scores, "Q"),
-            "group": (groups.astype(str), "G"),
+            "group": (groups, "G"),
         }
 
         if additional_covariates:
             covariates.update(additional_covariates)
 
-        # Fit regular Bayesian ANCOVA
-        result = self.fit(change_scores, covariates, hdi_prob, rope)
+        # Fit Bayesian ANCOVA with post scores as dependent variable
+        result = self.fit(post_scores, covariates, hdi_prob, rope)
 
         # Calculate adjusted means with credible intervals
-        df = self._prepare_dataframe(change_scores, covariates)
+        df = self._prepare_dataframe(post_scores, covariates)
         adjusted_means = self._calculate_adjusted_means(
             result.trace, df, groups, pre_scores, hdi_prob
         )
 
         # Calculate pairwise differences
-        adjusted_mean_diffs, credible_intervals = self._calculate_mean_differences(
+        adj_mean_diffs, credible_intervals = self._calculate_mean_differences(
             adjusted_means, result.trace, hdi_prob
         )
 
         # Update result with post-pre specific information
         result.adjusted_means = adjusted_means
-        result.adjusted_mean_diffs = adjusted_mean_diffs
+        result.adj_mean_diffs = adj_mean_diffs
         result.credible_intervals_95 = credible_intervals
 
         return result
@@ -244,11 +216,7 @@ class BayesianANCOVA:
                     f"Covariate '{name}' length ({len(data)}) does not match "
                     f"dependent variable length ({n})"
                 )
-            if cov_type not in ("Q", "C", "G"):
-                raise ValueError(
-                    f"Invalid covariate type '{cov_type}' for '{name}'. "
-                    "Must be 'Q', 'C', or 'G'"
-                )
+            validate_covariate_type(cov_type, name)
 
     def _prepare_dataframe(
         self,
@@ -260,13 +228,18 @@ class BayesianANCOVA:
 
         for name, (cov_data, cov_type) in covariates.items():
             if cov_type in ("C", "G"):
-                # Categorical variables - convert to codes
-                cat = pd.Categorical(cov_data.astype(str))
+                # Categorical variables - convert to codes (handles strings and numbers)
+                cat = convert_to_categorical(cov_data)
                 data[name] = cat.codes
                 data[f"{name}_labels"] = cat
             else:
                 # Quantitative variables - standardize
-                data[name] = (cov_data - np.mean(cov_data)) / np.std(cov_data)
+                mean_val = np.mean(cov_data)
+                std_val = np.std(cov_data)
+                if std_val > 0:
+                    data[name] = (cov_data - mean_val) / std_val
+                else:
+                    data[name] = cov_data - mean_val
 
         return pd.DataFrame(data)
 
@@ -274,18 +247,18 @@ class BayesianANCOVA:
         self,
         df: pd.DataFrame,
         covariates: dict[str, Covariate],
-    ) -> tuple[Any, Any]:  # Tuple[pm.Model, az.InferenceData]
+    ) -> tuple[Any, Any]:
         """Build and sample from Bayesian model."""
         with pm.Model() as model:
             # Priors for intercept
-            intercept = pm.Normal("intercept", mu=0, sigma=10)
+            intercept = pm.Normal("intercept", mu=0, sigma=self.prior_intercept_sigma)
 
             # Priors for each covariate
             mu = intercept
             for name, (_, cov_type) in covariates.items():
                 if cov_type == "Q":
                     # Quantitative covariate - single coefficient
-                    beta = pm.Normal(f"beta_{name}", mu=0, sigma=10)
+                    beta = pm.Normal(f"beta_{name}", mu=0, sigma=self.prior_beta_sigma)
                     mu += beta * df[name].values
                 else:
                     # Categorical covariate - multiple coefficients
@@ -293,14 +266,14 @@ class BayesianANCOVA:
                     if n_categories > 1:
                         # Use sum-to-zero constraint for identifiability
                         beta_raw = pm.Normal(
-                            f"beta_{name}_raw", mu=0, sigma=10, shape=n_categories - 1
+                            f"beta_{name}_raw", mu=0, sigma=self.prior_beta_sigma, shape=n_categories - 1
                         )
                         beta_last = -pm.math.sum(beta_raw)
                         beta = pm.math.concatenate([beta_raw, [beta_last]])
                         mu += beta[df[name].values.astype(int)]
 
-            # Prior for noise
-            sigma = pm.HalfNormal("sigma", sigma=10)
+            # Prior for noise (sigma default is 1.0)
+            sigma = pm.HalfNormal("sigma", sigma=self.prior_sigma)
 
             # Likelihood
             pm.Normal("y_obs", mu=mu, sigma=sigma, observed=df["y"].values)
