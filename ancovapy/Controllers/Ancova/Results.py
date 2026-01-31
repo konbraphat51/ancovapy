@@ -35,11 +35,12 @@ class AncovaResults:
 
         model_type: Literal["standard ANCOVA"]
         ss_type: Literal[1, 2, 3]
+        posthoc_method: Literal["Tukey"]
         dependent_variable: TermQuantitative
 
         # term name -> Term
         independent_variables: dict[str, Term]
-        
+
         alpha: np.float64
         """Significance level used for hypothesis testing."""
 
@@ -131,7 +132,35 @@ class AncovaResults:
         # category name -> adjusted mean
         adjusted_means: dict[str, MeanAdjusted]
 
+    @dataclass
+    class PostHocResults:
+        """Dataclass to report post-hoc test results."""
+
+        @dataclass
+        class PairwiseComparison:
+            """Dataclass to report each pairwise comparison result."""
+
+            category_pair: tuple[str, str]
+            """Adjusted mean difference between the two categories.
+            
+            This represents `category_pair[0] - category_pair[1]`.
+            """
+
+            adjusted_mean_diff: np.float64
+            adjusted_std_error: np.float64
+            f_statistic: np.float64
+            t_statistic: np.float64
+            p_value: np.float64
+            rejected: bool
+            confidence_interval: tuple[np.float64, np.float64]
+            effect_size_omega_squared: np.float64
+            effect_size_cohen_d: np.float64
+            effect_size_eta_squared: np.float64
+
+        # pairwise -> PairwiseComparison
+        pairwise_comparisons: dict[tuple[str, str], PairwiseComparison]
 
     description: ModelDescription
     assumption: AssumptionResults
     omnibus: OmnibusResults
+    posthoc: PostHocResults
