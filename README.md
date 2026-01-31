@@ -52,10 +52,12 @@ Specify covariates as tuples: `(data, type)`
 
 ## Documentation
 
-- **[Examples](docs/EXAMPLES.md)**: Comprehensive usage examples
+- **[Quick Start & Examples](docs/EXAMPLES.md)**: Comprehensive usage examples
 - **[API Reference](docs/API.md)**: Detailed API documentation
-- **[References](docs/REFERENCES.md)**: Scientific references and citations
-- **[Contributing](CONTRIBUTING.md)**: Development and contribution guidelines
+- **[Scientific References](docs/REFERENCES.md)**: Citations and further reading
+- **[Architecture](docs/ARCHITECTURE.md)**: SOLID principles and design
+- **[Verification](docs/VERIFICATION.md)**: Statistical implementation validation
+- **[Contributing](CONTRIBUTING.md)**: Development guidelines
 - **[Changelog](CHANGELOG.md)**: Version history
 
 ## Key Capabilities
