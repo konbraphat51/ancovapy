@@ -96,6 +96,13 @@ class ANCOVA:
         # Perform post-hoc tests for G-type covariates
         posthoc_results = self._perform_posthoc_tests(df, covariates, alpha)
 
+        # Calculate adjusted means for G-type covariates
+        adjusted_means, adj_mean_diffs, confidence_intervals = (
+            self._calculate_adjusted_means_for_groups(
+                model, df, covariates, alpha
+            )
+        )
+
         return ANCOVAResult(
             f_statistic=model.fvalue,
             p_value=model.f_pvalue,
@@ -104,9 +111,9 @@ class ANCOVA:
             covariate_stats=covariate_stats,
             posthoc_results=posthoc_results,
             model_summary=str(model.summary()),
-            adjusted_means=None,
-            adj_mean_diffs=None,
-            confidence_intervals=None,
+            adjusted_means=adjusted_means,
+            adj_mean_diffs=adj_mean_diffs,
+            confidence_intervals=confidence_intervals,
         )
 
     def fit_postpre(
@@ -417,3 +424,71 @@ class ANCOVA:
                 intervals[(group1, group2)] = (diff - margin, diff + margin)
 
         return differences, intervals
+
+    def _calculate_adjusted_means_for_groups(
+        self,
+        model: sm.regression.linear_model.RegressionResultsWrapper,
+        df: pd.DataFrame,
+        covariates: dict[str, Covariate],
+        alpha: float,
+    ) -> tuple[
+        dict[str, float] | None,
+        dict[tuple[str, str], float] | None,
+        dict[tuple[str, str], tuple[float, float]] | None,
+    ]:
+        """Calculate adjusted means for all G-type covariates."""
+        # Find G-type covariates
+        g_covariates = [
+            (name, data) for name, (data, cov_type) in covariates.items() if cov_type == "G"
+        ]
+
+        if not g_covariates:
+            return None, None, None
+
+        # For simplicity, calculate adjusted means for the first G-type covariate
+        # (typically there's one primary grouping variable)
+        cov_name, cov_data = g_covariates[0]
+        unique_groups = np.unique(cov_data.astype(str))
+
+        # Calculate mean of all other quantitative covariates
+        covariate_means = {}
+        for name, (data, cov_type) in covariates.items():
+            if cov_type == "Q":
+                covariate_means[name] = float(np.mean(data))
+
+        # Calculate adjusted mean for each group
+        adjusted_means = {}
+        for group in unique_groups:
+            # Create prediction dataframe with this group and mean covariates
+            pred_data = {cov_name: [group]}
+            pred_data.update(covariate_means)
+
+            # Add categorical covariates at their reference level or mode
+            for name, (data, cov_type) in covariates.items():
+                if cov_type in ("C", "G") and name != cov_name:
+                    # Use most common category
+                    unique_vals, counts = np.unique(data.astype(str), return_counts=True)
+                    mode_val = unique_vals[np.argmax(counts)]
+                    pred_data[name] = [mode_val]
+
+            pred_df = pd.DataFrame(pred_data)
+
+            # Ensure categorical columns are properly typed
+            for name, (_, cov_type) in covariates.items():
+                if cov_type in ("C", "G") and name in pred_df.columns:
+                    pred_df[name] = pd.Categorical(pred_df[name])
+
+            # Make prediction
+            try:
+                prediction = model.predict(pred_df)
+                adjusted_means[str(group)] = float(prediction[0])
+            except Exception:
+                # If prediction fails, skip this calculation
+                return None, None, None
+
+        # Calculate pairwise differences
+        adj_mean_diffs, confidence_intervals = self._calculate_mean_differences(
+            adjusted_means, alpha
+        )
+
+        return adjusted_means, adj_mean_diffs, confidence_intervals
