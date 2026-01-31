@@ -95,7 +95,7 @@ class TestANCOVA:
 
         # Check pairwise differences
         assert result.adj_mean_diffs is not None
-        assert result.credible_intervals is not None
+        assert result.confidence_intervals is not None
 
     def test_invalid_input_lengths(self) -> None:
         """Test that mismatched input lengths raise error."""

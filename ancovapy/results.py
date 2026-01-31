@@ -92,7 +92,7 @@ class ANCOVAResult:
     # For post-pre design
     adjusted_means: Optional[dict[str, float]]
     adj_mean_diffs: Optional[dict[tuple[str, str], float]]
-    credible_intervals: Optional[dict[tuple[str, str], tuple[float, float]]]
+    confidence_intervals: Optional[dict[tuple[str, str], tuple[float, float]]]
 
 
 @dataclass

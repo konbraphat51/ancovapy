@@ -88,8 +88,10 @@ class ANCOVA:
         # Calculate ANOVA table with specified SS type
         anova_table = sm.stats.anova_lm(model, typ=self.ss_type)
 
-        # Extract covariate statistics
-        covariate_stats = self._extract_covariate_stats(model, covariates, alpha)
+        # Extract covariate statistics (using ANOVA table for p-values)
+        covariate_stats = self._extract_covariate_stats(
+            model, covariates, alpha, anova_table
+        )
 
         # Perform post-hoc tests for G-type covariates
         posthoc_results = self._perform_posthoc_tests(df, covariates, alpha)
@@ -104,7 +106,7 @@ class ANCOVA:
             model_summary=str(model.summary()),
             adjusted_means=None,
             adj_mean_diffs=None,
-            credible_intervals=None,
+            confidence_intervals=None,
         )
 
     def fit_postpre(
@@ -148,26 +150,49 @@ class ANCOVA:
         # Fit ANCOVA with post scores as dependent variable
         result = self.fit(post_scores, covariates, alpha)
 
-        # Calculate adjusted means using model predictions
-        df = self._prepare_dataframe(post_scores, covariates)
-        formula = self._build_formula(covariates)
-        model = ols(formula, data=df).fit()
-
-        adjusted_means = self._calculate_adjusted_means_prediction(
-            model, df, groups, pre_scores
-        )
-
-        # Calculate pairwise differences
-        adj_mean_diffs, credible_intervals = self._calculate_mean_differences(
-            adjusted_means, alpha
+        # Calculate adjusted means using the fitted model
+        adjusted_means, adj_mean_diffs, confidence_intervals = (
+            self._calculate_postpre_adjusted_values(
+                post_scores, covariates, groups, pre_scores, alpha
+            )
         )
 
         # Update result with post-pre specific information
         result.adjusted_means = adjusted_means
         result.adj_mean_diffs = adj_mean_diffs
-        result.credible_intervals = credible_intervals
+        result.confidence_intervals = confidence_intervals
 
         return result
+
+    def _calculate_postpre_adjusted_values(
+        self,
+        post_scores: DependentVariable,
+        covariates: dict[str, Covariate],
+        groups: npt.NDArray,
+        pre_scores: npt.NDArray[np.float64],
+        alpha: float,
+    ) -> tuple[
+        dict[str, float],
+        dict[tuple[str, str], float],
+        dict[tuple[str, str], tuple[float, float]],
+    ]:
+        """Calculate adjusted means, differences, and confidence intervals for post-pre design."""
+        # Prepare data and fit model
+        df = self._prepare_dataframe(post_scores, covariates)
+        formula = self._build_formula(covariates)
+        model = ols(formula, data=df).fit()
+
+        # Calculate adjusted means
+        adjusted_means = self._calculate_adjusted_means_prediction(
+            model, df, groups, pre_scores
+        )
+
+        # Calculate pairwise differences
+        adj_mean_diffs, confidence_intervals = self._calculate_mean_differences(
+            adjusted_means, alpha
+        )
+
+        return adjusted_means, adj_mean_diffs, confidence_intervals
 
     def _prepare_postpre_covariates(
         self,
@@ -242,8 +267,9 @@ class ANCOVA:
         model: sm.regression.linear_model.RegressionResultsWrapper,
         covariates: dict[str, Covariate],
         alpha: float,
+        anova_table: pd.DataFrame,
     ) -> list[CovariateStats]:
-        """Extract statistics for each covariate."""
+        """Extract statistics for each covariate using ANOVA table for p-values."""
         stats_list = []
 
         params = model.params
@@ -253,6 +279,12 @@ class ANCOVA:
             if cov_type == "Q":
                 # Quantitative covariate - single parameter
                 if name in params.index:
+                    # Use ANOVA table p-value if available
+                    if name in anova_table.index:
+                        p_value = anova_table.loc[name, "PR(>F)"]
+                    else:
+                        p_value = model.pvalues[name]
+                    
                     stats_list.append(
                         CovariateStats(
                             name=name,
@@ -260,16 +292,25 @@ class ANCOVA:
                             coefficient=params[name],
                             std_error=model.bse[name],
                             t_value=model.tvalues[name],
-                            p_value=model.pvalues[name],
+                            p_value=p_value,
                             ci_lower=conf_int.loc[name, 0],
                             ci_upper=conf_int.loc[name, 1],
                         )
                     )
             else:
-                # Categorical - find first related parameter
+                # Categorical - find first related parameter and use ANOVA table p-value
                 related_params = [p for p in params.index if name in p]
                 if related_params:
                     param_name = related_params[0]
+                    
+                    # Look for corresponding row in ANOVA table
+                    # Try different naming conventions: name, C(name), etc.
+                    anova_p_value = model.pvalues[param_name]  # fallback
+                    for idx in anova_table.index:
+                        if name in idx:
+                            anova_p_value = anova_table.loc[idx, "PR(>F)"]
+                            break
+                    
                     stats_list.append(
                         CovariateStats(
                             name=name,
@@ -277,7 +318,7 @@ class ANCOVA:
                             coefficient=params[param_name],
                             std_error=model.bse[param_name],
                             t_value=model.tvalues[param_name],
-                            p_value=model.pvalues[param_name],
+                            p_value=anova_p_value,
                             ci_lower=conf_int.loc[param_name, 0],
                             ci_upper=conf_int.loc[param_name, 1],
                         )

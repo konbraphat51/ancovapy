@@ -49,9 +49,10 @@ class BayesianANCOVA:
         mcmc_tune: int = 1000,
         mcmc_chains: int = 4,
         random_seed: Optional[int] = None,
-        prior_intercept_sigma: float = 10.0,
-        prior_beta_sigma: float = 10.0,
-        prior_sigma: float = 1.0,
+        prior_intercept_sigma: Optional[float] = None,
+        prior_beta_sigma: Optional[float] = None,
+        prior_sigma: Optional[float] = None,
+        priors: Optional[dict] = None,
     ):
         """
         Initialize Bayesian ANCOVA analyzer.
@@ -73,13 +74,16 @@ class BayesianANCOVA:
                 Use same seed for identical results (default: None)
             prior_intercept_sigma: Standard deviation for intercept prior.
                 Controls how much the intercept can vary from 0.
-                (default: 10.0)
+                If None, uses Bambi's automatic prior specification (default: None)
             prior_beta_sigma: Standard deviation for coefficient priors.
                 Controls how much each coefficient can vary from 0.
-                (default: 10.0)
+                If None, uses Bambi's automatic prior specification (default: None)
             prior_sigma: Scale parameter for noise prior (HalfNormal).
                 Represents expected residual standard deviation.
-                (default: 1.0)
+                If None, uses Bambi's automatic prior specification (default: None)
+            priors: PyMC model priors dictionary for advanced customization.
+                If provided, overrides individual prior parameters.
+                Allows full control over prior specification (default: None)
         """
         self.hypothesis_type = hypothesis_type
         self.mcmc_samples = mcmc_samples
@@ -88,6 +92,8 @@ class BayesianANCOVA:
         self.random_seed = random_seed
         self.prior_intercept_sigma = prior_intercept_sigma
         self.prior_beta_sigma = prior_beta_sigma
+        self.prior_sigma = prior_sigma
+        self.priors = priors
         self.prior_sigma = prior_sigma
 
     def fit(
@@ -180,13 +186,9 @@ class BayesianANCOVA:
             raise ValueError("All input arrays must have the same length")
 
         # Prepare covariates dictionary with baseline and group
-        covariates: dict[str, Covariate] = {
-            "baseline": (pre_scores, "Q"),
-            "group": (groups, "G"),
-        }
-
-        if additional_covariates:
-            covariates.update(additional_covariates)
+        covariates = self._prepare_postpre_covariates(
+            pre_scores, groups, additional_covariates
+        )
 
         # Fit Bayesian ANCOVA with post scores as dependent variable
         result = self.fit(post_scores, covariates, hdi_prob, rope)
@@ -208,6 +210,23 @@ class BayesianANCOVA:
         result.credible_intervals_95 = credible_intervals
 
         return result
+
+    def _prepare_postpre_covariates(
+        self,
+        pre_scores: DependentVariable,
+        groups: npt.NDArray,
+        additional_covariates: dict[str, Covariate] | None,
+    ) -> dict[str, Covariate]:
+        """Prepare covariates dictionary for post-pre design."""
+        covariates: dict[str, Covariate] = {
+            "baseline": (pre_scores, "Q"),
+            "group": (groups, "G"),
+        }
+
+        if additional_covariates:
+            covariates.update(additional_covariates)
+
+        return covariates
 
     def _validate_inputs(
         self,
@@ -269,14 +288,30 @@ class BayesianANCOVA:
         # Build formula
         formula = self._build_formula(covariates)
 
-        # Create Bambi model with custom priors
-        priors = {
-            "Intercept": bmb.Prior("Normal", mu=0, sigma=self.prior_intercept_sigma),
-            "common": bmb.Prior("Normal", mu=0, sigma=self.prior_beta_sigma),
-            "sigma": bmb.Prior("HalfNormal", sigma=self.prior_sigma),
-        }
+        # Create Bambi model with priors
+        if self.priors is not None:
+            # Use custom PyMC priors if provided
+            model = bmb.Model(formula, df, priors=self.priors)
+        elif (
+            self.prior_intercept_sigma is not None
+            or self.prior_beta_sigma is not None
+            or self.prior_sigma is not None
+        ):
+            # Build priors from individual parameters
+            priors = {}
+            if self.prior_intercept_sigma is not None:
+                priors["Intercept"] = bmb.Prior(
+                    "Normal", mu=0, sigma=self.prior_intercept_sigma
+                )
+            if self.prior_beta_sigma is not None:
+                priors["common"] = bmb.Prior("Normal", mu=0, sigma=self.prior_beta_sigma)
+            if self.prior_sigma is not None:
+                priors["sigma"] = bmb.Prior("HalfNormal", sigma=self.prior_sigma)
 
-        model = bmb.Model(formula, df, priors=priors)
+            model = bmb.Model(formula, df, priors=priors)
+        else:
+            # Use Bambi's automatic prior specification
+            model = bmb.Model(formula, df)
 
         # Sample from posterior
         trace = model.fit(
