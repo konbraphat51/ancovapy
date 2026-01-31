@@ -64,7 +64,18 @@ class AncovaResults:
             passed: bool
             """True if all interaction terms are not significant."""
 
+        @dataclass
+        class IndependenceOfTreatment:
+            """Dataclass to report independence of treatment test results."""
+
+            f_statistic: float
+            df: int
+            p_value: float
+            rejected: bool
+            passed: bool
+
         homogeneity_of_regression_slopes: HomogeneityOfRegressionSlopes
+        independence_of_treatment: IndependenceOfTreatment
 
     description: ModelDescription
     assumption: AssumptionResults
